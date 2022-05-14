@@ -126,16 +126,6 @@ public:
 		std::list<Connection<TVertex, TEdge>> blank_list;
 		edges.insert(std::pair<TVertex, std::list<Connection<TVertex, TEdge>>>(vertex, blank_list));
 	}
-	/*void AddEdge(const TVertex& source, const TVertex& dest)
-	{
-		auto begin = vert.begin();
-		auto end = vert.end();
-		if (std::find(begin, end, source) == end || std::find(begin, end, dest) == end)
-		{
-			throw "one of vertexes is unknown";
-		}
-		edges[source].push_front(dest);
-	}*/
 
 	void AddEdge(const Connection<TVertex, TEdge>& connection)
 	{
@@ -164,24 +154,6 @@ public:
 			edges[connection.src].erase(needed_to_erase);
 		}
 	}
-
-
-	/*void RemoveEdge(const int source, const int dest)
-	{
-		auto begin = vert.begin();
-		auto end = vert.end();
-		if (std::find(begin, end, source) == end || std::find(begin, end, dest) == end)
-		{
-			throw "one of vertexes is unknown";
-		}
-		auto begin_list = edges[source].begin();
-		auto end_list = edges[source].end();
-		auto needed_to_erase = std::find(begin_list, end_list, dest);
-		if (needed_to_erase != end_list)
-		{
-			edges[source].erase(needed_to_erase);
-		}
-	}*/
 	void RemoveVertex(const TVertex& vertex)
 	{
 		auto begin = vert.begin();
@@ -208,36 +180,11 @@ public:
 		}
 	}
 
-	/*void RemoveVertex(const int vertex)
-	{
-		auto begin = vert.begin();
-		auto end = vert.end();
-		auto needed_to_delete = std::find(begin, end, vertex);
-		if (needed_to_delete != end)
-		{
-			vert.erase(needed_to_delete);
-			for (auto pair : edges)
-			{
-				auto it_list = pair.second.begin();
-				for (; it_list != pair.second.end(); )
-				{
-					if (*it_list == vertex)
-					{
-						it_list = pair.second.erase(it_list);
-					}
-					else
-					{
-						++it_list;
-					}
-				}
-			}
-		}
-	}*/
-
+	
 	std::list<TVertex> SearchInWidth(const TVertex& source, const TVertex& dest) const
 	{
 		std::unordered_map<TVertex, bool> colors;  //0 = непосещенна€
-		std::unordered_map<TVertex, TVertex> pred;    //
+		std::unordered_map<TVertex, TVertex> pred;
 		std::unordered_map<TVertex, int> distance;
 		for (auto it : vert)
 		{
@@ -353,53 +300,6 @@ public:
 		return std::pair<std::list<TVertex>, double>(path_to_dest, res_weight);
 	}
 
-
-
-	//std::list<TVertex> Djkstra(const TVertex& source, const TVertex& dest) const
-	//{
-	//	//»нициализаци€: дл€ каждой вершины рассто€ние = беск, пред = нуль, d(source) = 0
-	//	//S = список пройденных вершин, Q - очередь с приоритетами, изначально содержит все вершины
-	//	//ѕока Q не пуста: извлекаем минимальную вершину, добавл€ем ее в S
-	//	// ƒл€ каждой смежной вершины с минимальной:
-	//	//		≈сли (d(смежной) > d(min)+w(мин, смежной)): d(смежной) = d(min) + w(мин, смежной) , пред(смежной) = мин
-	//	std::unordered_map<TVertex, double> distance;
-	//	std::unordered_map<TVertex, TVertex> pred;
-	//	std::list<TVertex> S;
-	//	//std::priority_queue<std::pair<TVertex, double>&, std::vector<std::pair<TVertex, double>&>, PQcompare> q;
-	//	for (const auto vertex : vert)
-	//	{
-	//		distance[vertex] = std::numeric_limits<double>::max();
-	//	}
-	//	distance[source] = 0;
-	//	while (!distance.empty())
-	//	{
-	//		auto min = std::min_element(distance.begin(), distance.end(), [](const std::pair<TVertex, double>& a, const std::pair<TVertex, double> b)->bool {return a.second < b.second; });
-	//		if (std::find(S.begin(), S.end(), min->first) == S.end())
-	//		{
-	//			S.push_front(min->first);
-	//			auto pair_with_list = edges.find(min->first);
-	//			for (const auto it : pair_with_list->second)
-	//			{
-	//				if (distance[it.dest] > distance[min->first] + static_cast<double>(it.edge))
-	//				{
-	//					distance[it.dest] = distance[min->first] + static_cast<double>(it.edge);
-	//					pred[it.dest] = min->first;
-	//				}
-	//			}
-	//		}
-	//		distance.erase(min->first);
-	//	}
-	//	std::list<TVertex> path_to_dest;
-	//	path_to_dest.push_back(dest);
-	//	auto prev_u = pred.find(dest);
-	//	while (prev_u != pred.end())
-	//	{
-	//		path_to_dest.push_front(prev_u->second);
-	//		prev_u = pred.find(prev_u->second);
-	//	}
-	//	return path_to_dest;
-	//}
-
 	void Print() const
 	{
 		std::cout << "¬ершина: (¬ершина-источник, ¬ершина-приемник, –ебро)" << std::endl;
@@ -413,10 +313,6 @@ public:
 			{
 				std::cout << "( " << it.src << ",  " << it.dest << ",  " << it.edge << " ) ";
 			}
-			/*for (const auto connect : edges[vertex])
-			{
-				std::cout << connect.src << "  " << connect.dest << "  " << connect.edge;
-			}*/
 			std::cout << std::endl;
 		}
 
