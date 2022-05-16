@@ -291,7 +291,7 @@ public:
 		}
 	}
 
-	std::pair<std::list<TVertex>, double> Djkstra(const TVertex& source, const TVertex& dest) const
+	std::pair<std::list<TVertex>, double> Dijkstra(const TVertex& source, const TVertex& dest) const
 	{
 		//Инициализация: для каждой вершины расстояние = беск, пред = нуль, d(source) = 0
 		//S = список пройденных вершин, Q - очередь с приоритетами, изначально содержит все вершины
@@ -303,7 +303,6 @@ public:
 		std::vector<TVertex> visited_vertexes;
 		KeyEqual equality = KeyEqual();
 		double res_weight = 0;
-		//std::priority_queue<std::pair<TVertex, double>&, std::vector<std::pair<TVertex, double>&>, PQcompare> q;
 		for (const auto vertex : vert)
 		{
 			distance[vertex] = std::numeric_limits<double>::max();
@@ -318,9 +317,11 @@ public:
 				auto pair_with_list = edges.find(min->first);
 				for (const auto it : pair_with_list->second)
 				{
-					if (distance[it.dest] > distance[min->first] + static_cast<double>(it.edge))
+					double w = static_cast<double>(it.edge);
+					if (w < 0) throw "Algorithm cannot be executed if there are negative weights";
+					if (distance[it.dest] > distance[min->first] + w)
 					{
-						distance[it.dest] = distance[min->first] + static_cast<double>(it.edge);
+						distance[it.dest] = distance[min->first] + w;
 						pred[it.dest] = min->first;
 					}
 				}
@@ -442,7 +443,7 @@ int main()
 	g1.SearchInDepth(Town("Самара", 1000000), printTown);
 	const auto source = samara;
 	const auto dest = irkutsk;
-	const auto pair = g1.Djkstra(source, dest);
+	const auto pair = g1.Dijkstra(source, dest);
 	const auto list = pair.first;
 	const double weight = pair.second;
 	if (list.size() == 1)
@@ -524,7 +525,7 @@ int main()
 
 	graph_real.AddEdge(washington, new_york, Road(380.0, "DC-NY"));
 	graph_real.AddEdge(new_york, washington, Road(380.0, "DC-NY"));
-	//graph_real.RemoveVertex(moscow);
+	//graph_real.RemoveVertex(ufa);
 	graph_real.RemoveVertex(new_york);
 
 	//graph_real.RemoveEdge(new_york, washington);
@@ -534,7 +535,7 @@ int main()
 	graph_real.SearchInDepth(minsk, printTown);
 	const auto source = minsk;
 	const auto dest = khabarovsk;
-	const auto pair = graph_real.Djkstra(source, dest);
+	const auto pair = graph_real.Dijkstra(source, dest);
 	const auto list = pair.first;
 	const double weight = pair.second;
 	if (list.size() == 1)
