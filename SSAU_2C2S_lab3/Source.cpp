@@ -63,7 +63,7 @@ public:
 	Road(const double length, const std::string& name) : length(length), name(name) {}
 	double GetLength() const { return length; }
 	std::string GetName() const { return name; }
-	operator double() const { return length; }
+	explicit operator double() const { return length; }  // explicit чтобы не было неявных преобразований
 };
 std::ostream& operator<<(std::ostream& out, const Road& road)
 {
@@ -340,7 +340,7 @@ public:
 		}
 		return std::pair<std::list<TVertex>, double>(path_to_dest, res_weight);
 	}
-
+	
 	void Print() const
 	{
 		std::cout << "Вершина: (Вершина-приемник, Ребро)" << std::endl;
@@ -357,9 +357,9 @@ public:
 			}
 			std::cout << std::endl;
 		}
-
 	}
 };
+
 
 void printTown(const Town& town)
 {
