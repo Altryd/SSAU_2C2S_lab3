@@ -19,7 +19,7 @@ public:
 	}
 	Town& operator=(const Town& rhs)
 	{
-		if (*this == rhs) return *this;
+		if (this == &rhs) return *this;
 		name = rhs.name;
 		people = rhs.people;
 		return *this;
@@ -28,10 +28,8 @@ public:
 	{
 		return ((name == rhs.name) && (people == rhs.people));
 	}
-	bool operator!=(const Town& rhs) const
-	{
-		return !(*this == rhs);
-	}
+	bool operator!=(const Town& rhs) const { return !(*this == rhs); }
+
 	std::string GetName() const
 	{
 		return name;
@@ -49,6 +47,15 @@ struct std::hash<Town>
 	size_t operator()(const Town& town) const
 	{
 		return std::hash<std::string>()(town.GetName());
+	}
+};
+
+template<>
+struct std::equal_to<Town>
+{
+	size_t operator()(const Town& lhs, const Town& rhs) const
+	{
+		return ((lhs.GetName() == rhs.GetName()) && (rhs.GetPeopleCount() == rhs.GetPeopleCount()));
 	}
 };
 
@@ -76,9 +83,10 @@ struct Connection {
 	const TEdge edge;
 
 	Connection(const TVertex& src, const TVertex& dest, const TEdge& edge) : src(src), dest(dest), edge(edge) {}
+	Connection(const TVertex& src, const TVertex& dest) : src(src), dest(dest) {}
 	bool operator==(const Connection& rhs) const
 	{
-		return ((src == rhs.src) && (dest == rhs.dest) && (edge == rhs.edge));
+		return ((src == rhs.src) && (dest == rhs.dest));
 	}
 	bool operator!=(const Connection& rhs) const
 	{
@@ -87,13 +95,13 @@ struct Connection {
 };
 
 
-template<typename TVertex, typename TEdge>
+template<typename TVertex, typename TEdge, typename Hasher = std::hash<TVertex>, typename KeyEqual=std::equal_to<TVertex>>
 class Graph
 {
 private:
 	std::vector<TVertex> vert;
-	std::unordered_map<TVertex, std::list<Connection<TVertex, TEdge>>> edges;
-	void SearchInDepth(const TVertex& start, std::unordered_map<TVertex, bool>& colors, std::unordered_map<TVertex, TVertex>& pred) const
+	std::unordered_map<TVertex, std::list<Connection<TVertex, TEdge>>, Hasher, KeyEqual> edges;
+	void SearchInDepth(const TVertex& start, std::unordered_map<TVertex, bool>& colors, std::unordered_map<TVertex, TVertex>& pred, void (*func)(const TVertex&)) const
 	{
 		const auto needed_list = edges.find(start);
 		for (const auto it : needed_list->second)
@@ -102,17 +110,11 @@ private:
 			{
 				pred[it.dest] = start;
 				colors[it.dest] = true;
-				SearchInDepth(it.dest, colors, pred);
+				func(it.dest);
+				SearchInDepth(it.dest, colors, pred, func);
 			}
 		}
 	}
-	struct PQcompare
-	{
-		size_t operator()(const std::pair<TVertex, double>& lhs, const std::pair<TVertex, double>& rhs) const
-		{
-			return lhs.second < rhs.second;
-		}
-	};
 public:
 	void AddVertex(const TVertex& vertex)
 	{
@@ -138,6 +140,18 @@ public:
 		edges[connection.src].push_front(connection);
 	}
 
+
+	void AddEdge(const TVertex& src, const TVertex& dest, const TEdge& edge)
+	{
+		auto begin = vert.begin();
+		auto end = vert.end();
+		if (std::find(begin, end, src) == end || std::find(begin, end, dest) == end)
+		{
+			throw "one of vertexes is unknown";
+		}
+		edges[src].push_front(Connection<TVertex, TEdge>(src, dest, edge));
+	}
+
 	void RemoveEdge(const Connection<TVertex, TEdge>& connection)
 	{
 		auto begin = vert.begin();
@@ -154,6 +168,24 @@ public:
 			edges[connection.src].erase(needed_to_erase);
 		}
 	}
+	void RemoveEdge(const TVertex& src, const TVertex& dst)
+	{
+		auto begin = vert.begin();
+		auto end = vert.end();
+		if (std::find(begin, end, src) == end || std::find(begin, end, dst) == end)
+		{
+			throw "one of vertexes is unknown";
+		}
+		auto begin_list = edges[src].begin();
+		auto end_list = edges[src].end();
+		Connection<TVertex, TEdge> to_delete(src, dst);
+		auto needed_to_erase = std::find(begin_list, end_list, to_delete);
+		if (needed_to_erase != end_list)
+		{
+			edges[src].erase(needed_to_erase);
+		}
+	}
+
 	void RemoveVertex(const TVertex& vertex)
 	{
 		auto begin = vert.begin();
@@ -162,6 +194,8 @@ public:
 		if (needed_to_delete != end)
 		{
 			vert.erase(needed_to_delete);
+			auto unordered_map_erase_pair = edges.find(vertex);
+			if (unordered_map_erase_pair != edges.end()) edges.erase(unordered_map_erase_pair);
 			for (auto pair : edges)
 			{
 				auto it_list = pair.second.begin();
@@ -225,7 +259,7 @@ public:
 
 
 
-	void SearchInDepth(const TVertex& start) const
+	void SearchInDepth(const TVertex& start, void (*func)(const TVertex&)) const
 	{
 		//Инициализация- для каждой вершины цвет = белый, пред = нуль
 		//После - цвет(старт) = черный, для каждой смежной с старт:
@@ -239,6 +273,7 @@ public:
 			colors[vertex] = false;
 		}
 		colors[start] = true;
+		func(start);
 		const auto needed_list = edges.find(start);
 		for (const auto it : needed_list->second)
 		{
@@ -246,7 +281,8 @@ public:
 			{
 				pred[it.dest] = start;
 				colors[it.dest] = true;
-				SearchInDepth(it.dest, colors, pred);
+				func(it.dest);
+				SearchInDepth(it.dest, colors, pred, func);
 			}
 		}
 	}
@@ -261,6 +297,7 @@ public:
 		std::unordered_map<TVertex, double> distance;
 		std::unordered_map<TVertex, TVertex> pred;
 		std::list<TVertex> S;
+		KeyEqual equality = KeyEqual();
 		double res_weight = 0;
 		//std::priority_queue<std::pair<TVertex, double>&, std::vector<std::pair<TVertex, double>&>, PQcompare> q;
 		for (const auto vertex : vert)
@@ -283,7 +320,7 @@ public:
 						pred[it.dest] = min->first;
 					}
 				}
-				if (min->first == dest) {
+				if (equality(min->first, dest)) {
 					res_weight = distance[dest];
 				}
 			}
@@ -302,7 +339,7 @@ public:
 
 	void Print() const
 	{
-		std::cout << "Вершина: (Вершина-источник, Вершина-приемник, Ребро)" << std::endl;
+		std::cout << "Вершина: (Вершина-приемник, Ребро)" << std::endl;
 		auto begin = vert.begin();
 		auto end = vert.end();
 		for (; begin != end; begin++)
@@ -311,7 +348,8 @@ public:
 			auto pair_with_list = edges.find(*begin);
 			for (const auto it : pair_with_list->second)
 			{
-				std::cout << "( " << it.src << ",  " << it.dest << ",  " << it.edge << " ) ";
+				//std::cout << "( " << it.src << ",  " << it.dest << ",  " << it.edge << " ) ";
+				std::cout << "( " << it.dest << ",  " << it.edge << " ) ";
 			}
 			std::cout << std::endl;
 		}
@@ -319,9 +357,15 @@ public:
 	}
 };
 
+void printTown(const Town& town)
+{
+	std::cout << town.GetName() << std::endl;
+}
+
 
 //#define easiest
-#define medium
+//#define medium
+#define IRL
 int main()
 {
 	setlocale(LC_ALL, "Ru");
@@ -364,36 +408,36 @@ int main()
 #endif
 #ifdef medium
 	Graph<Town, Road> g1;
-	Town some_city("Москва", 5100000);
-	Town some_city2("Безенчук", 20000);
-	Town some_city3("Магадан", 90000);
-	Town some_city4("Иркутск", 100000);
-	Town some_city5("Владивосток", 500000);
-	Town some_city6("Вашингтон", 9800000);
-	Town some_city7("Минск", 7855000);
+	Town moscow("Москва", 5100000);
+	Town minsk("Безенчук", 20000);
+	Town samara("Магадан", 90000);
+	Town bezenchuk("Иркутск", 100000);
+	Town ufa("Владивосток", 500000);
+	Town surgut("Вашингтон", 9800000);
+	Town irkutsk("Минск", 7855000);
 
-	g1.AddVertex(some_city);
+	g1.AddVertex(moscow);
 	g1.AddVertex(Town("Самара", 1000000));
-	g1.AddVertex(some_city2);
-	g1.AddVertex(some_city3);
-	g1.AddVertex(some_city4);
-	g1.AddVertex(some_city5);
-	g1.AddVertex(some_city6);
-	g1.AddVertex(some_city7);
-	g1.AddEdge(Connection<Town, Road>(some_city, Town("Самара", 1000000), Road(10.1, "Ми-6")));
-	g1.AddEdge(Connection<Town, Road>(Town("Самара", 1000000), some_city, Road(10.3, "Ми-6")));
-	g1.AddEdge(Connection<Town, Road>(Town("Самара", 1000000), some_city2, Road(2.3, "Дорога")));
-	g1.AddEdge(Connection<Town, Road>(some_city2, some_city3, Road(7.3, "Еду в Магадан")));
-	g1.AddEdge(Connection<Town, Road>(some_city, some_city4, Road(15.01, "Байкал-Москва")));
-	g1.AddEdge(Connection<Town, Road>(some_city3, some_city4, Road(5.15, "Экскурсия на Байкал")));
-	g1.AddEdge(Connection<Town, Road>(some_city4, some_city5, Road(5.15, "Иркутск-Владивосток")));
-	g1.AddEdge(Connection<Town, Road>(some_city, some_city5, Road(28.15, "Москва-Владивосток")));
-	g1.AddEdge(Connection<Town, Road>(some_city5, some_city, Road(28.15, "Владивосток-Москва")));
-	g1.AddEdge(Connection<Town, Road>(some_city, some_city7, Road(30.33, "Москва-Минск")));
-	g1.AddEdge(Connection<Town, Road>(some_city7, some_city, Road(30.33, "Минск-Москва")));
+	g1.AddVertex(minsk);
+	g1.AddVertex(samara);
+	g1.AddVertex(bezenchuk);
+	g1.AddVertex(ufa);
+	g1.AddVertex(surgut);
+	g1.AddVertex(irkutsk);
+	g1.AddEdge(Connection<Town, Road>(moscow, Town("Самара", 1000000), Road(10.1, "Ми-6")));
+	g1.AddEdge(Connection<Town, Road>(Town("Самара", 1000000), moscow, Road(10.3, "Ми-6")));
+	g1.AddEdge(Connection<Town, Road>(Town("Самара", 1000000), minsk, Road(2.3, "Дорога")));
+	g1.AddEdge(Connection<Town, Road>(minsk, samara, Road(7.3, "Еду в Магадан")));
+	g1.AddEdge(Connection<Town, Road>(moscow, bezenchuk, Road(15.01, "Байкал-Москва")));
+	g1.AddEdge(Connection<Town, Road>(samara, bezenchuk, Road(5.15, "Экскурсия на Байкал")));
+	g1.AddEdge(Connection<Town, Road>(bezenchuk, ufa, Road(5.15, "Иркутск-Владивосток")));
+	g1.AddEdge(Connection<Town, Road>(moscow, ufa, Road(28.15, "Москва-Владивосток")));
+	g1.AddEdge(Connection<Town, Road>(ufa, moscow, Road(28.15, "Владивосток-Москва")));
+	g1.AddEdge(Connection<Town, Road>(moscow, irkutsk, Road(30.33, "Москва-Минск")));
+	g1.AddEdge(Connection<Town, Road>(irkutsk, moscow, Road(30.33, "Минск-Москва")));
 	g1.SearchInDepth(Town("Самара", 1000000));
-	const auto source = some_city3;
-	const auto dest = some_city7;
+	const auto source = samara;
+	const auto dest = irkutsk;
 	const auto pair = g1.Djkstra(source, dest);
 	const auto list = pair.first;
 	const double weight = pair.second;
@@ -412,5 +456,90 @@ int main()
 	}
 	std::cout << std::endl << std::endl;
 	g1.Print();
+#endif
+	
+
+
+#ifdef IRL
+	Graph<Town, Road> graph_real;
+	Town moscow("Москва", 12635466);
+	Town saint_petersburg("Санкт-Петербург", 5377503);
+	Town minsk("Минск", 1996553);
+	Town samara("Самара", 1144759);
+	Town bezenchuk("Безенчук", 21540);
+	Town ufa("Уфа", 1125933);
+	Town surgut("Сургут", 395900);
+	Town irkutsk("Иркутск", 617315);
+	Town khabarovsk("Хабаровск", 613480);
+	Town washington("Вашингтон", 689545);
+	Town new_york("Нью-Йорк", 8804190);
+	
+	
+
+	graph_real.AddVertex(moscow);
+	graph_real.AddVertex(saint_petersburg);
+	graph_real.AddVertex(minsk);
+	graph_real.AddVertex(samara);
+	graph_real.AddVertex(bezenchuk);
+	graph_real.AddVertex(ufa);
+	graph_real.AddVertex(surgut);
+	graph_real.AddVertex(irkutsk);
+	graph_real.AddVertex(khabarovsk);
+	graph_real.AddVertex(washington);
+	graph_real.AddVertex(new_york);
+	graph_real.AddEdge(moscow, minsk, Road(716.1, "М-1"));  //Москва
+	graph_real.AddEdge(moscow, samara, Road(1057.3, "М-2"));
+	graph_real.AddEdge(moscow, ufa, Road(1355.2, "М-3"));
+	graph_real.AddEdge(moscow, surgut, Road(2876.4, "М-4"));
+	graph_real.AddEdge(moscow, saint_petersburg, Road(710.5, "М-11"));
+
+	graph_real.AddEdge(samara, bezenchuk, Road(96.1, "Р-229")); //Самара
+	graph_real.AddEdge(samara, moscow, Road(1057.3, "М-2"));
+	graph_real.AddEdge(samara, ufa, Road(473.1, "М-5"));
+
+	graph_real.AddEdge(bezenchuk, minsk, Road(1939.2, "Р-120"));  //Безенчук
+	graph_real.AddEdge(bezenchuk, samara, Road(96.1, "Р-229"));
+	graph_real.AddEdge(bezenchuk, irkutsk, Road(4367.1, "Р-229"));
+
+	graph_real.AddEdge(ufa, samara, Road(473.1, "М-5"));  //Уфа
+	graph_real.AddEdge(ufa, surgut, Road(1678.3, "Р-404"));
+	graph_real.AddEdge(ufa, irkutsk, Road(3826.9, "Р-255"));
+
+	graph_real.AddEdge(surgut, irkutsk, Road(2763.8, "Р-256"));  //Сургут
+	graph_real.AddEdge(surgut, khabarovsk, Road(6941.5, "Р-257"));
+
+	graph_real.AddEdge(irkutsk, ufa, Road(3826.9, "Р-255"));  //Иркутск
+	graph_real.AddEdge(irkutsk, khabarovsk, Road(3207.9, "Р-457"));
+
+	graph_real.AddEdge(khabarovsk, irkutsk, Road(3207.9, "Р-457"));  //Хабаровск
+
+	graph_real.AddEdge(saint_petersburg, moscow, Road(710.5, "М-11"));  //SPB
+
+	graph_real.AddEdge(minsk, moscow, Road(716.1, "М-1"));  //Минск
+
+	graph_real.AddEdge(washington, new_york, Road(380.0, "DC-NY"));
+	graph_real.AddEdge(new_york, washington, Road(380.0, "DC-NY"));
+
+	graph_real.SearchInDepth(moscow, printTown);
+	const auto source = minsk;
+	const auto dest = khabarovsk;
+	const auto pair = graph_real.Djkstra(source, dest);
+	const auto list = pair.first;
+	const double weight = pair.second;
+	if (list.size() == 1)
+	{
+		std::cout << "Пути в данную вершину нет";
+	}
+	else
+	{
+		for (const auto it : list)
+		{
+			if (it.GetName() != dest.GetName()) std::cout << it << " -> ";
+			else std::cout << it;
+		}
+		std::cout << std::endl << "Вес пути: " << weight << std::endl;
+	}
+	std::cout << std::endl << std::endl;
+	graph_real.Print();
 #endif
 }
