@@ -24,11 +24,6 @@ public:
 		people = rhs.people;
 		return *this;
 	}
-	bool operator==(const Town& rhs) const
-	{
-		return ((name == rhs.name) && (people == rhs.people));
-	}
-	bool operator!=(const Town& rhs) const { return !(*this == rhs); }
 
 	std::string GetName() const
 	{
@@ -64,6 +59,7 @@ class Road
 	double length;
 	std::string name;
 public:
+	Road() { length = 0; }
 	Road(const double length, const std::string& name) : length(length), name(name) {}
 	double GetLength() const { return length; }
 	std::string GetName() const { return name; }
@@ -76,7 +72,7 @@ std::ostream& operator<<(std::ostream& out, const Road& road)
 }
 
 
-template<typename TVertex, typename TEdge>
+template<typename TVertex, typename TEdge, typename KeyEqual = std::equal_to<TVertex>>
 struct Connection {
 	const TVertex src;
 	const TVertex dest;
@@ -86,7 +82,8 @@ struct Connection {
 	Connection(const TVertex& src, const TVertex& dest) : src(src), dest(dest) {}
 	bool operator==(const Connection& rhs) const
 	{
-		return ((src == rhs.src) && (dest == rhs.dest));
+		KeyEqual equality;
+		return (equality(src, rhs.src) && equality(dest, rhs.dest));
 	}
 	bool operator!=(const Connection& rhs) const
 	{
@@ -115,12 +112,22 @@ private:
 			}
 		}
 	}
+	std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<TVertex>>> FindInVertex(const TVertex& vertex, const std::vector<TVertex>& vector) const
+	{
+		KeyEqual equality;
+		auto it = vector.begin();
+		for (; it != vector.end(); it++)
+		{
+			if (equality(vertex, *it)) return it;
+		}
+		return it;
+	}
 public:
 	void AddVertex(const TVertex& vertex)
 	{
 		auto begin = vert.begin();
 		auto end = vert.end();
-		if (std::find(begin, end, vertex) != end)
+		if (FindInVertex(vertex, vert) != end)
 		{
 			throw "Vertex is already inserted";
 		}
@@ -133,19 +140,18 @@ public:
 	{
 		auto begin = vert.begin();
 		auto end = vert.end();
-		if (std::find(begin, end, connection.src) == end || std::find(begin, end, connection.dest) == end)
+		if (FindInVertex(connection.src, vert) == end || FindInVertex(connection.dest, vert) == end)
 		{
 			throw "one of vertexes is unknown";
 		}
 		edges[connection.src].push_front(connection);
 	}
 
-
 	void AddEdge(const TVertex& src, const TVertex& dest, const TEdge& edge)
 	{
 		auto begin = vert.begin();
 		auto end = vert.end();
-		if (std::find(begin, end, src) == end || std::find(begin, end, dest) == end)
+		if (FindInVertex(src, vert) == end || FindInVertex(dest, vert) == end)
 		{
 			throw "one of vertexes is unknown";
 		}
@@ -156,7 +162,7 @@ public:
 	{
 		auto begin = vert.begin();
 		auto end = vert.end();
-		if (std::find(begin, end, connection.src) == end || std::find(begin, end, connection.dest) == end)
+		if (FindInVertex(connection.src, vert) == end || FindInVertex(connection.dest, vert) == end)
 		{
 			throw "one of vertexes is unknown";
 		}
@@ -172,7 +178,7 @@ public:
 	{
 		auto begin = vert.begin();
 		auto end = vert.end();
-		if (std::find(begin, end, src) == end || std::find(begin, end, dst) == end)
+		if (FindInVertex(src, vert) == end || FindInVertex(dst, vert) == end)
 		{
 			throw "one of vertexes is unknown";
 		}
@@ -188,20 +194,21 @@ public:
 
 	void RemoveVertex(const TVertex& vertex)
 	{
+		KeyEqual equality;
 		auto begin = vert.begin();
 		auto end = vert.end();
-		auto needed_to_delete = std::find(begin, end, vertex);
+		auto needed_to_delete = FindInVertex(vertex, vert);
 		if (needed_to_delete != end)
 		{
 			vert.erase(needed_to_delete);
 			auto unordered_map_erase_pair = edges.find(vertex);
 			if (unordered_map_erase_pair != edges.end()) edges.erase(unordered_map_erase_pair);
-			for (auto pair : edges)
+			for (auto& pair : edges)
 			{
 				auto it_list = pair.second.begin();
 				for (; it_list != pair.second.end(); )
 				{
-					if (it_list->dest == vertex)
+					if (equality(it_list->dest, vertex))
 					{
 						it_list = pair.second.erase(it_list);
 					}
@@ -214,7 +221,6 @@ public:
 		}
 	}
 
-	
 	std::list<TVertex> SearchInWidth(const TVertex& source, const TVertex& dest) const
 	{
 		std::unordered_map<TVertex, bool> colors;  //0 = непосещенная
@@ -257,8 +263,6 @@ public:
 		return path_to_dest;
 	}
 
-
-
 	void SearchInDepth(const TVertex& start, void (*func)(const TVertex&)) const
 	{
 		//Инициализация- для каждой вершины цвет = белый, пред = нуль
@@ -296,7 +300,7 @@ public:
 		//		Если (d(смежной) > d(min)+w(мин, смежной)): d(смежной) = d(min) + w(мин, смежной) , пред(смежной) = мин
 		std::unordered_map<TVertex, double> distance;
 		std::unordered_map<TVertex, TVertex> pred;
-		std::list<TVertex> S;
+		std::vector<TVertex> visited_vertexes;
 		KeyEqual equality = KeyEqual();
 		double res_weight = 0;
 		//std::priority_queue<std::pair<TVertex, double>&, std::vector<std::pair<TVertex, double>&>, PQcompare> q;
@@ -308,9 +312,9 @@ public:
 		while (!distance.empty())
 		{
 			auto min = std::min_element(distance.begin(), distance.end(), [](const std::pair<TVertex, double>& a, const std::pair<TVertex, double> b)->bool {return a.second < b.second; });
-			if (std::find(S.begin(), S.end(), min->first) == S.end())
+			if (FindInVertex(min->first, visited_vertexes) == visited_vertexes.end())
 			{
-				S.push_front(min->first);
+				visited_vertexes.push_back(min->first);
 				auto pair_with_list = edges.find(min->first);
 				for (const auto it : pair_with_list->second)
 				{
@@ -435,7 +439,7 @@ int main()
 	g1.AddEdge(Connection<Town, Road>(ufa, moscow, Road(28.15, "Владивосток-Москва")));
 	g1.AddEdge(Connection<Town, Road>(moscow, irkutsk, Road(30.33, "Москва-Минск")));
 	g1.AddEdge(Connection<Town, Road>(irkutsk, moscow, Road(30.33, "Минск-Москва")));
-	g1.SearchInDepth(Town("Самара", 1000000));
+	g1.SearchInDepth(Town("Самара", 1000000), printTown);
 	const auto source = samara;
 	const auto dest = irkutsk;
 	const auto pair = g1.Djkstra(source, dest);
@@ -447,9 +451,10 @@ int main()
 	}
 	else
 	{
+		std::equal_to<Town> equality;
 		for (const auto it : list)
 		{
-			if (it != dest) std::cout << it << " -> ";
+			if (!equality(it, dest)) std::cout << it << " -> ";
 			else std::cout << it;
 		}
 		std::cout << std::endl << "Вес пути: " << weight << std::endl;
@@ -519,8 +524,14 @@ int main()
 
 	graph_real.AddEdge(washington, new_york, Road(380.0, "DC-NY"));
 	graph_real.AddEdge(new_york, washington, Road(380.0, "DC-NY"));
+	//graph_real.RemoveVertex(moscow);
+	graph_real.RemoveVertex(new_york);
 
-	graph_real.SearchInDepth(moscow, printTown);
+	//graph_real.RemoveEdge(new_york, washington);
+	//graph_real.RemoveEdge(washington, new_york);
+	
+
+	graph_real.SearchInDepth(minsk, printTown);
 	const auto source = minsk;
 	const auto dest = khabarovsk;
 	const auto pair = graph_real.Djkstra(source, dest);
@@ -528,7 +539,7 @@ int main()
 	const double weight = pair.second;
 	if (list.size() == 1)
 	{
-		std::cout << "Пути в данную вершину нет";
+		std::cout << "Пути в вершину " << dest << " нет";
 	}
 	else
 	{
