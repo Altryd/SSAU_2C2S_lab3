@@ -10,7 +10,7 @@ class Town
 	std::string name;
 	int people;
 public:
-	Town() { name = ""; people = -1; }
+	Town() { name = ""; people = 0; }
 	Town(const std::string& name, const int people) : name(name), people(people) {}
 	Town(const Town& rhs)
 	{
@@ -65,6 +65,26 @@ public:
 	std::string GetName() const { return name; }
 	explicit operator double() const { return length; }  // explicit чтобы не было неявных преобразований
 };
+
+enum RoadTypes
+{
+	Default = 0,
+	Taxes = 1,
+	HighCost = 2
+};
+class RoadWithCoefficient
+{
+	double length;
+	std::string name;
+	RoadTypes type;
+public:
+	RoadWithCoefficient() { length = 0; type = Default; }
+	RoadWithCoefficient(const double length, const std::string& name, const RoadTypes type) : length(length), name(name), type(type) {}
+	double GetLength() const { return length; }
+	std::string GetName() const { return name; }
+	RoadTypes GetType() const { return type; }
+};
+
 std::ostream& operator<<(std::ostream& out, const Road& road)
 {
 	out << road.GetName() << "  " << road.GetLength() << " ";
@@ -90,6 +110,59 @@ struct Connection {
 		return !(*this == rhs);
 	}
 };
+
+template<typename TEdge>
+class DefaultWeightSelector
+{
+public:
+	double operator()(const TEdge& edge) const
+	{
+		double res = static_cast<double>(edge);
+		return res;
+	}
+};
+
+
+class RoadWithCoefficientSelector
+{
+public:
+	double operator()(const RoadWithCoefficient& edge) const
+	{
+		double length = edge.GetLength();
+		switch (edge.GetType())
+		{
+		case Taxes:
+			length *= 10;
+			break;
+
+		case HighCost:
+			length *= 500;
+			break;
+		default:
+			break;
+		}
+		return length;
+	}
+};
+std::ostream& operator<<(std::ostream& out, const RoadWithCoefficient& road)
+{
+	RoadTypes type = road.GetType();
+	std::string additional_info;
+	switch (type)
+	{
+	case Taxes:
+		additional_info = std::string("С налогами");
+		break;
+	case HighCost:
+		additional_info = std::string("Очень высокая цена");
+		break;
+	default:
+		additional_info = std::string("Стандартная");
+		break;
+	}
+	out << road.GetName() << "  " << road.GetLength() << " " + additional_info;
+	return out;
+}
 
 
 template<typename TVertex, typename TEdge, typename Hasher = std::hash<TVertex>, typename KeyEqual=std::equal_to<TVertex>>
@@ -290,14 +363,16 @@ public:
 			}
 		}
 	}
-
+	
+	template<typename WeightSelector = DefaultWeightSelector<TEdge>>
 	std::pair<std::list<TVertex>, double> Dijkstra(const TVertex& source, const TVertex& dest) const
 	{
 		//Инициализация: для каждой вершины расстояние = беск, пред = нуль, d(source) = 0
-		//S = список пройденных вершин, Q - очередь с приоритетами, изначально содержит все вершины
+		//S = список пройденных вершин, Q - очередь с приоритетами, изначально содержит все вершины (здесь не используется)
 		//Пока Q не пуста: извлекаем минимальную вершину, добавляем ее в S
 		// Для каждой смежной вершины с минимальной:
 		//		Если (d(смежной) > d(min)+w(мин, смежной)): d(смежной) = d(min) + w(мин, смежной) , пред(смежной) = мин
+		WeightSelector selector;
 		std::unordered_map<TVertex, double> distance;
 		std::unordered_map<TVertex, TVertex> pred;
 		std::vector<TVertex> visited_vertexes;
@@ -317,7 +392,7 @@ public:
 				auto pair_with_list = edges.find(min->first);
 				for (const auto it : pair_with_list->second)
 				{
-					double w = static_cast<double>(it.edge);
+					double w = selector(it.edge);
 					if (w < 0) throw "Algorithm cannot be executed if there are negative weights";
 					if (distance[it.dest] > distance[min->first] + w)
 					{
@@ -341,7 +416,7 @@ public:
 		}
 		return std::pair<std::list<TVertex>, double>(path_to_dest, res_weight);
 	}
-	
+
 	void Print() const
 	{
 		std::cout << "Вершина: (Вершина-приемник, Ребро)" << std::endl;
@@ -353,14 +428,12 @@ public:
 			auto pair_with_list = edges.find(*begin);
 			for (const auto it : pair_with_list->second)
 			{
-				//std::cout << "( " << it.src << ",  " << it.dest << ",  " << it.edge << " ) ";
 				std::cout << "( " << it.dest << ",  " << it.edge << " ) ";
 			}
 			std::cout << std::endl;
 		}
 	}
 };
-
 
 void printTown(const Town& town)
 {
@@ -370,7 +443,8 @@ void printTown(const Town& town)
 
 //#define easiest
 //#define medium
-#define IRL
+//#define IRL
+#define HARD_IRL
 int main()
 {
 	setlocale(LC_ALL, "Ru");
@@ -463,9 +537,6 @@ int main()
 	std::cout << std::endl << std::endl;
 	g1.Print();
 #endif
-	
-
-
 #ifdef IRL
 	Graph<Town, Road> graph_real;
 	Town moscow("Москва", 12635466);
@@ -525,17 +596,96 @@ int main()
 
 	graph_real.AddEdge(washington, new_york, Road(380.0, "DC-NY"));
 	graph_real.AddEdge(new_york, washington, Road(380.0, "DC-NY"));
-	//graph_real.RemoveVertex(ufa);
 	graph_real.RemoveVertex(new_york);
-
-	//graph_real.RemoveEdge(new_york, washington);
-	//graph_real.RemoveEdge(washington, new_york);
 	
 
-	graph_real.SearchInDepth(minsk, printTown);
+	graph_real.SearchInDepth(moscow, printTown);
 	const auto source = minsk;
 	const auto dest = khabarovsk;
 	const auto pair = graph_real.Dijkstra(source, dest);
+	const auto list = pair.first;
+	const double weight = pair.second;
+	if (list.size() == 1)
+	{
+		std::cout << "Пути в вершину " << dest << " нет";
+	}
+	else
+	{
+		for (const auto it : list)
+		{
+			if (it.GetName() != dest.GetName()) std::cout << it << " -> ";
+			else std::cout << it;
+		}
+		std::cout << std::endl << "Вес пути: " << weight << std::endl;
+	}
+	std::cout << std::endl << std::endl;
+	graph_real.Print();
+#endif
+#ifdef HARD_IRL
+	Graph<Town, RoadWithCoefficient> graph_real;
+	Town moscow("Москва", 12635466);
+	Town saint_petersburg("Санкт-Петербург", 5377503);
+	Town minsk("Минск", 1996553);
+	Town samara("Самара", 1144759);
+	Town bezenchuk("Безенчук", 21540);
+	Town ufa("Уфа", 1125933);
+	Town surgut("Сургут", 395900);
+	Town irkutsk("Иркутск", 617315);
+	Town khabarovsk("Хабаровск", 613480);
+	Town washington("Вашингтон", 689545);
+	Town new_york("Нью-Йорк", 8804190);
+
+
+	graph_real.AddVertex(moscow);
+	graph_real.AddVertex(saint_petersburg);
+	graph_real.AddVertex(minsk);
+	graph_real.AddVertex(samara);
+	graph_real.AddVertex(bezenchuk);
+	graph_real.AddVertex(ufa);
+	graph_real.AddVertex(surgut);
+	graph_real.AddVertex(irkutsk);
+	graph_real.AddVertex(khabarovsk);
+	graph_real.AddVertex(washington);
+	graph_real.AddVertex(new_york);
+	graph_real.AddEdge(moscow, minsk, RoadWithCoefficient(716.1, "М-1", Default));  //Москва
+	graph_real.AddEdge(moscow, samara, RoadWithCoefficient(1057.3, "М-2", Default));
+	graph_real.AddEdge(moscow, ufa, RoadWithCoefficient(1355.2, "М-3", Default));
+	graph_real.AddEdge(moscow, surgut, RoadWithCoefficient(2876.4, "М-4", Default));
+	graph_real.AddEdge(moscow, saint_petersburg, RoadWithCoefficient(710.5, "М-11", Default));
+
+	graph_real.AddEdge(samara, bezenchuk, RoadWithCoefficient(96.1, "Р-229", Default)); //Самара
+	graph_real.AddEdge(samara, moscow, RoadWithCoefficient(1057.3, "М-2", Default));
+	graph_real.AddEdge(samara, ufa, RoadWithCoefficient(473.1, "М-5", Default));
+
+	graph_real.AddEdge(bezenchuk, minsk, RoadWithCoefficient(1939.2, "Р-120", Default));  //Безенчук
+	graph_real.AddEdge(bezenchuk, samara, RoadWithCoefficient(96.1, "Р-229", Default));
+	graph_real.AddEdge(bezenchuk, irkutsk, RoadWithCoefficient(4367.1, "Р-229", Default));
+
+	graph_real.AddEdge(ufa, samara, RoadWithCoefficient(473.1, "М-5", Default));  //Уфа
+	graph_real.AddEdge(ufa, surgut, RoadWithCoefficient(1678.3, "Р-404", Default));
+	graph_real.AddEdge(ufa, irkutsk, RoadWithCoefficient(3826.9, "Р-255", Default));
+
+	graph_real.AddEdge(surgut, irkutsk, RoadWithCoefficient(2763.8, "Р-256", Default));  //Сургут
+	graph_real.AddEdge(surgut, khabarovsk, RoadWithCoefficient(6941.5, "Р-257", Default));
+
+	graph_real.AddEdge(irkutsk, ufa, RoadWithCoefficient(3826.9, "Р-255", Default));  //Иркутск
+	graph_real.AddEdge(irkutsk, khabarovsk, RoadWithCoefficient(3207.9, "Р-457", Default));
+
+	graph_real.AddEdge(khabarovsk, irkutsk, RoadWithCoefficient(3207.9, "Р-457", Default));  //Хабаровск
+
+	graph_real.AddEdge(saint_petersburg, moscow, RoadWithCoefficient(710.5, "М-11", Default));  //SPB
+
+	graph_real.AddEdge(minsk, moscow, RoadWithCoefficient(716.1, "М-1", HighCost));  //Минск
+
+	graph_real.AddEdge(washington, new_york, RoadWithCoefficient(380.0, "DC-NY", Default));
+	graph_real.AddEdge(new_york, washington, RoadWithCoefficient(380.0, "DC-NY", Default));
+	graph_real.RemoveVertex(new_york);
+
+
+	graph_real.SearchInDepth(moscow, printTown);
+	const auto source = minsk;
+	const auto dest = khabarovsk;
+	const auto pair = graph_real.Dijkstra<RoadWithCoefficientSelector>(source, dest);
 	const auto list = pair.first;
 	const double weight = pair.second;
 	if (list.size() == 1)
